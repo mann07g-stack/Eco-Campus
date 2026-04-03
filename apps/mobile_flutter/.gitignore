@@ -1,0 +1,23 @@
+.dart_tool/
+.packages
+.pub/
+build/
+*.iml
+
+# Generated plugin registrants
+**/GeneratedPluginRegistrant.*
+
+# Android
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/App.framework
+
+# Secrets
+.env

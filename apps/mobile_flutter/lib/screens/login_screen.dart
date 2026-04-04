@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:dio/dio.dart";
 
 import "../models/auth_session.dart";
 import "../services/api_service.dart";
@@ -25,6 +26,43 @@ class _LoginScreenState extends State<LoginScreen> {
   String _error = "";
   String _mode = "login";
 
+  String _formatError(Object error, {required String fallback}) {
+    if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      final responseData = error.response?.data;
+      String serverMessage = "";
+
+      if (responseData is Map<String, dynamic>) {
+        final msg = responseData["message"] ?? responseData["error"];
+        if (msg != null) {
+          serverMessage = msg.toString();
+        }
+      } else if (responseData != null) {
+        serverMessage = responseData.toString();
+      }
+
+      if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout) {
+        return "Cannot reach API. Check that backend is running and your device can connect.";
+      }
+
+      if (statusCode != null) {
+        if (serverMessage.isNotEmpty) {
+          return "Request failed ($statusCode): $serverMessage";
+        }
+        return "Request failed with status $statusCode.";
+      }
+
+      if (serverMessage.isNotEmpty) {
+        return serverMessage;
+      }
+    }
+
+    return fallback;
+  }
+
   Future<void> _login() async {
     setState(() {
       _loading = true;
@@ -37,8 +75,8 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _password.text,
       );
       widget.onLoggedIn(AuthSession.fromJson(res.data["user"] as Map<String, dynamic>));
-    } catch (_) {
-      setState(() => _error = "Login failed. Please verify credentials.");
+    } catch (error) {
+      setState(() => _error = _formatError(error, fallback: "Login failed. Please verify credentials."));
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -66,8 +104,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _password.clear();
         _error = "Account created. You can log in now.";
       });
-    } catch (_) {
-      setState(() => _error = "Registration failed. Please check the details.");
+    } catch (error) {
+      setState(() => _error = _formatError(error, fallback: "Registration failed. Please check the details."));
     } finally {
       if (mounted) {
         setState(() => _registering = false);

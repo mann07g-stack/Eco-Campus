@@ -6,18 +6,8 @@ const bcrypt = require("bcryptjs");
 const apiEnvPath = path.resolve(__dirname, "../.env");
 const rootEnvPath = path.resolve(__dirname, "../../.env");
 
-const apiEnvResult = dotenv.config({ path: apiEnvPath });
-if (apiEnvResult.error) {
-  console.warn(`Could not load API env file at ${apiEnvPath}: ${apiEnvResult.error.message}`);
-} else {
-  console.log(`Loaded environment from: ${apiEnvPath}`);
-}
-
-// Fallback values only; does not override already-loaded variables from apps/api/.env.
-const rootEnvResult = dotenv.config({ path: rootEnvPath });
-if (!rootEnvResult.error) {
-  console.log(`Loaded fallback environment from: ${rootEnvPath}`);
-}
+dotenv.config({ path: apiEnvPath });
+dotenv.config({ path: rootEnvPath });
 
 const mongoUri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB_NAME || "eco_campus";
@@ -26,8 +16,6 @@ if (!mongoUri) {
   console.error("Missing MONGODB_URI in environment.");
   process.exit(1);
 }
-
-console.log(`Using MongoDB database name: ${dbName}`);
 
 const userSchema = new mongoose.Schema(
   {
@@ -48,6 +36,7 @@ const requestSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     campusId: { type: String, required: true },
     imageUrl: { type: String, required: true },
+    imageUrls: { type: [String], default: [] },
     description: { type: String, required: true },
     categoriesDetected: { type: [String], default: [] },
     status: {
@@ -56,8 +45,14 @@ const requestSchema = new mongoose.Schema(
       default: "SUBMITTED"
     },
     currentQuote: { type: Number, default: 0 },
+    adminQuote: { type: Number, default: 0 },
+    adminQuoteMessage: { type: String, default: "" },
+    lastUserCounterMessage: { type: String, default: "" },
+    quotePendingForUser: { type: Boolean, default: false },
     agreedQuote: { type: Number, default: 0 },
     qrTokenId: { type: mongoose.Schema.Types.ObjectId, ref: "QrToken", default: null },
+    assignedMemberId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    assignedAt: { type: Date, default: null },
     collectedByMemberId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     agreedAt: { type: Date, default: null },
     collectedAt: { type: Date, default: null }
@@ -113,196 +108,34 @@ const QrToken = mongoose.models.QrToken || mongoose.model("QrToken", qrTokenSche
 const Bootstrap = mongoose.models.Bootstrap || mongoose.model("Bootstrap", bootstrapSchema);
 const Campus = mongoose.models.Campus || mongoose.model("Campus", campusSchema);
 
-async function ensureAdmin() {
-  const adminEmail = (process.env.ADMIN_EMAIL || "admin@eco-campus.local").toLowerCase();
-  const adminPassword = process.env.ADMIN_PASSWORD || "Admin@12345";
-  const adminName = process.env.ADMIN_NAME || "Eco Campus Admin";
-  const adminPhone = process.env.ADMIN_PHONE || "9999999999";
-  const adminCampusId = process.env.ADMIN_CAMPUS_ID || "MAIN-CAMPUS";
-  const adminDepartment = process.env.ADMIN_DEPARTMENT || "Operations";
-
-  const existing = await User.findOne({ email: adminEmail });
-  if (existing) {
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
-    existing.fullName = adminName;
-    existing.phone = adminPhone;
-    existing.campusId = adminCampusId;
-    existing.department = adminDepartment;
-    existing.passwordHash = passwordHash;
-    if (existing.role !== "ADMIN") {
-      existing.role = "ADMIN";
-    }
-    await existing.save();
-    console.log(`Updated existing admin user and password: ${adminEmail}`);
-    return existing;
-  }
-
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
-  const adminUser = await User.create({
-    role: "ADMIN",
-    fullName: adminName,
-    email: adminEmail,
-    phone: adminPhone,
-    campusId: adminCampusId,
-    department: adminDepartment,
-    passwordHash,
-    isActive: true
-  });
-
-  console.log(`Created default admin user: ${adminEmail}`);
-  console.log("Default admin password is set from ADMIN_PASSWORD or fallback value. Change it immediately in production.");
-  return adminUser;
-}
-
-async function ensureBootstrapDocument() {
-  await Bootstrap.updateOne(
-    { key: "project" },
-    {
-      $setOnInsert: {
-        key: "project",
-        value: {
-          name: "Eco Campus",
-          database: dbName,
-          initializedAt: new Date().toISOString(),
-          description: "Bootstrap metadata for campus e-waste system"
-        }
-      }
-    },
-    { upsert: true }
-  );
-
-  console.log("Created bootstrap metadata document.");
-}
-
-async function ensureCampusDocument() {
-  const campus = await Campus.findOneAndUpdate(
-    { code: "MAIN-CAMPUS" },
-    {
-      $setOnInsert: {
-        name: "Eco Campus Main Campus",
-        code: "MAIN-CAMPUS",
-        address: "University Road, Campus Block A",
-        city: "Campus City"
-      }
-    },
-    { upsert: true, new: true }
-  );
-
-  console.log(`Created campus seed document: ${campus.code}`);
-  return campus;
-}
-
-async function ensureSeedUser({ role, fullName, email, phone, campusId, department, password }) {
-  const normalizedEmail = email.toLowerCase();
-  const existing = await User.findOne({ email: normalizedEmail });
-  if (existing) {
-    if (existing.role !== role) {
-      existing.role = role;
-      existing.fullName = fullName;
-      existing.phone = phone;
-      existing.campusId = campusId;
-      existing.department = department;
-      await existing.save();
-    }
-    return existing;
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
+async function createUser({ role, fullName, email, phone, campusId, department, password }) {
   return User.create({
     role,
     fullName,
-    email: normalizedEmail,
+    email: email.toLowerCase(),
     phone,
     campusId,
     department,
-    passwordHash,
+    passwordHash: await bcrypt.hash(password, 10),
     isActive: true
   });
-}
-
-async function ensureSampleRequest(studentUser, memberUser) {
-  const existingRequest = await Request.findOne({ userId: studentUser._id });
-  if (existingRequest) {
-    return existingRequest;
-  }
-
-  const request = await Request.create({
-    userId: studentUser._id,
-    campusId: studentUser.campusId,
-    imageUrl: "https://example.com/uploads/sample-ewaste.jpg",
-    description: "Sample laptop, charger, and old mouse for testing the eco campus workflow.",
-    categoriesDetected: ["Laptop", "Charger", "Mouse"],
-    status: "QR_ISSUED",
-    currentQuote: 450,
-    agreedQuote: 450,
-    agreedAt: new Date(),
-    qrTokenId: null,
-    collectedByMemberId: memberUser._id,
-    collectedAt: null
-  });
-
-  return request;
-}
-
-async function ensureNegotiation(request, adminUser, studentUser) {
-  const existingNegotiation = await Negotiation.findOne({ requestId: request._id });
-  if (existingNegotiation) {
-    return existingNegotiation;
-  }
-
-  return Negotiation.create({
-    requestId: request._id,
-    senderRole: "ADMIN",
-    senderId: adminUser._id,
-    offeredAmount: 450,
-    message: "Sample quote created during database bootstrap for testing."
-  });
-}
-
-async function ensureQrToken(request, memberUser) {
-  const existingToken = await QrToken.findOne({ requestId: request._id });
-  if (existingToken) {
-    request.qrTokenId = existingToken._id;
-    await request.save();
-    return existingToken;
-  }
-
-  const token = await QrToken.create({
-    requestId: request._id,
-    tokenHash: `qr-${request._id}`,
-    expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-    isUsed: false,
-    usedAt: null,
-    usedByMemberId: memberUser._id
-  });
-
-  request.qrTokenId = token._id;
-  await request.save();
-
-  return token;
 }
 
 async function initDb() {
   try {
-    const connectOptions = {
+    await mongoose.connect(mongoUri, {
       dbName,
-      tls: true,
-      authSource: "admin",
       retryWrites: true,
       w: "majority",
       serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 30000
-    };
+    });
 
-    // For development, if SSL issues occur
-    if (mongoUri.includes("mongodb+srv")) {
-      connectOptions.tlsAllowInvalidCertificates = false;
-      connectOptions.tlsAllowInvalidHostnames = false;
-    }
-
-    await mongoose.connect(mongoUri, connectOptions);
     console.log(`Connected to MongoDB database: ${dbName}`);
+    console.log("Deleting old database data...");
+    await mongoose.connection.db.dropDatabase();
+    console.log("Old database deleted successfully.");
 
     await Promise.all([
       User.createCollection(),
@@ -322,52 +155,254 @@ async function initDb() {
       Campus.syncIndexes()
     ]);
 
-    const campus = await ensureCampusDocument();
-    await ensureBootstrapDocument();
-    const adminUser = await ensureAdmin();
-
-    const studentUser = await ensureSeedUser({
-      role: "USER",
-      fullName: "Sample Student",
-      email: "student@eco-campus.local",
-      phone: "8888888888",
-      campusId: campus.code,
-      department: "Computer Science",
-      password: "Student@12345"
+    const mainCampus = await Campus.create({
+      name: "Eco Campus Main Campus",
+      code: "MAIN-CAMPUS",
+      address: "University Road, Block A",
+      city: "Metro City"
     });
 
-    const memberUser = await ensureSeedUser({
+    const northCampus = await Campus.create({
+      name: "Eco Campus North Campus",
+      code: "NORTH-CAMPUS",
+      address: "North Ring Road, Block N",
+      city: "Metro City"
+    });
+
+    await Bootstrap.create({
+      key: "project",
+      value: {
+        name: "Eco Campus",
+        database: dbName,
+        initializedAt: new Date().toISOString(),
+        seedVersion: "fresh-v2"
+      }
+    });
+
+    const admin = await createUser({
+      role: "ADMIN",
+      fullName: process.env.ADMIN_NAME || "Eco Campus Admin",
+      email: process.env.ADMIN_EMAIL || "admin@eco-campus.local",
+      phone: process.env.ADMIN_PHONE || "9999999999",
+      campusId: "MAIN-CAMPUS",
+      department: "Operations",
+      password: process.env.ADMIN_PASSWORD || "Admin@12345"
+    });
+
+    const mainMember = await createUser({
       role: "MEMBER",
-      fullName: "Sample Campus Member",
-      email: "member@eco-campus.local",
-      phone: "7777777777",
-      campusId: campus.code,
+      fullName: "Rahul Main Collector",
+      email: "member.main@eco-campus.local",
+      phone: "7777000001",
+      campusId: mainCampus.code,
       department: "Facilities",
       password: "Member@12345"
     });
 
-    const sampleRequest = await ensureSampleRequest(studentUser, memberUser);
-    await ensureNegotiation(sampleRequest, adminUser, studentUser);
-    await ensureQrToken(sampleRequest, memberUser);
+    const northMember = await createUser({
+      role: "MEMBER",
+      fullName: "Anita North Collector",
+      email: "member.north@eco-campus.local",
+      phone: "7777000002",
+      campusId: northCampus.code,
+      department: "Facilities",
+      password: "Member@12345"
+    });
+
+    const students = {
+      main1: await createUser({
+        role: "USER",
+        fullName: "Aman Verma",
+        email: "aman.main@eco-campus.local",
+        phone: "8888000001",
+        campusId: mainCampus.code,
+        department: "Computer Science",
+        password: "Student@12345"
+      }),
+      main2: await createUser({
+        role: "USER",
+        fullName: "Priya Nair",
+        email: "priya.main@eco-campus.local",
+        phone: "8888000002",
+        campusId: mainCampus.code,
+        department: "Electronics",
+        password: "Student@12345"
+      }),
+      main3: await createUser({
+        role: "USER",
+        fullName: "Karan Singh",
+        email: "karan.main@eco-campus.local",
+        phone: "8888000003",
+        campusId: mainCampus.code,
+        department: "Mechanical",
+        password: "Student@12345"
+      }),
+      north1: await createUser({
+        role: "USER",
+        fullName: "Neha Roy",
+        email: "neha.north@eco-campus.local",
+        phone: "8888000004",
+        campusId: northCampus.code,
+        department: "Architecture",
+        password: "Student@12345"
+      }),
+      north2: await createUser({
+        role: "USER",
+        fullName: "Rohit Das",
+        email: "rohit.north@eco-campus.local",
+        phone: "8888000005",
+        campusId: northCampus.code,
+        department: "Civil",
+        password: "Student@12345"
+      })
+    };
+
+    const requests = await Request.insertMany([
+      {
+        userId: students.main1._id,
+        campusId: mainCampus.code,
+        imageUrl: "https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?w=800",
+        imageUrls: ["https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?w=800"],
+        description: "Old laptop and charger for pickup",
+        categoriesDetected: ["Laptop", "Charger"],
+        status: "QR_ISSUED",
+        currentQuote: 600,
+        adminQuote: 600,
+        adminQuoteMessage: "Good condition devices.",
+        quotePendingForUser: false,
+        agreedQuote: 600,
+        assignedMemberId: mainMember._id,
+        assignedAt: new Date(),
+        agreedAt: new Date()
+      },
+      {
+        userId: students.main2._id,
+        campusId: mainCampus.code,
+        imageUrl: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=800",
+        imageUrls: ["https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=800"],
+        description: "CRT monitor and keyboard",
+        categoriesDetected: ["Monitor", "Keyboard"],
+        status: "BARGAINING",
+        currentQuote: 350,
+        adminQuote: 400,
+        adminQuoteMessage: "Monitor is bulky.",
+        lastUserCounterMessage: "Can you make it 350?",
+        quotePendingForUser: false,
+        agreedQuote: 0
+      },
+      {
+        userId: students.main3._id,
+        campusId: mainCampus.code,
+        imageUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800",
+        imageUrls: ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800"],
+        description: "Broken UPS battery set",
+        categoriesDetected: ["Battery", "UPS"],
+        status: "SUBMITTED",
+        currentQuote: 0,
+        adminQuote: 0,
+        quotePendingForUser: false,
+        agreedQuote: 0
+      },
+      {
+        userId: students.north1._id,
+        campusId: northCampus.code,
+        imageUrl: "https://images.unsplash.com/photo-1610337673044-720471f83677?w=800",
+        imageUrls: ["https://images.unsplash.com/photo-1610337673044-720471f83677?w=800"],
+        description: "Networking router and modem scrap",
+        categoriesDetected: ["Router", "Modem"],
+        status: "QR_ISSUED",
+        currentQuote: 250,
+        adminQuote: 250,
+        adminQuoteMessage: "Approved for north campus pickup.",
+        quotePendingForUser: false,
+        agreedQuote: 250,
+        assignedMemberId: northMember._id,
+        assignedAt: new Date(),
+        agreedAt: new Date()
+      },
+      {
+        userId: students.north2._id,
+        campusId: northCampus.code,
+        imageUrl: "https://images.unsplash.com/photo-1527443195645-1133f7f28990?w=800",
+        imageUrls: ["https://images.unsplash.com/photo-1527443195645-1133f7f28990?w=800"],
+        description: "Old CPU cabinet and cables",
+        categoriesDetected: ["CPU", "Cables"],
+        status: "QUOTED",
+        currentQuote: 300,
+        adminQuote: 300,
+        adminQuoteMessage: "Please accept to proceed.",
+        quotePendingForUser: true,
+        agreedQuote: 0
+      }
+    ]);
+
+    const qrIssued = requests.filter((item) => item.status === "QR_ISSUED");
+
+    for (const req of qrIssued) {
+      const token = await QrToken.create({
+        requestId: req._id,
+        tokenHash: `qr-${req._id}`,
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        isUsed: false
+      });
+
+      req.qrTokenId = token._id;
+      await req.save();
+    }
+
+    await Negotiation.insertMany([
+      {
+        requestId: requests[0]._id,
+        senderRole: "ADMIN",
+        senderId: admin._id,
+        offeredAmount: 600,
+        message: "Final quote sent."
+      },
+      {
+        requestId: requests[1]._id,
+        senderRole: "USER",
+        senderId: students.main2._id,
+        offeredAmount: 350,
+        message: "Can you make it 350?"
+      },
+      {
+        requestId: requests[3]._id,
+        senderRole: "ADMIN",
+        senderId: admin._id,
+        offeredAmount: 250,
+        message: "North campus pickup approved."
+      },
+      {
+        requestId: requests[4]._id,
+        senderRole: "ADMIN",
+        senderId: admin._id,
+        offeredAmount: 300,
+        message: "Quote sent for your confirmation."
+      }
+    ]);
 
     const counts = {
       campuses: await Campus.countDocuments(),
-      bootstraps: await Bootstrap.countDocuments(),
       users: await User.countDocuments(),
+      members: await User.countDocuments({ role: "MEMBER" }),
+      students: await User.countDocuments({ role: "USER" }),
       requests: await Request.countDocuments(),
+      mainCampusRequests: await Request.countDocuments({ campusId: "MAIN-CAMPUS" }),
+      northCampusRequests: await Request.countDocuments({ campusId: "NORTH-CAMPUS" }),
       negotiations: await Negotiation.countDocuments(),
       qrtokens: await QrToken.countDocuments()
     };
 
-    console.log("Seeded document counts:", JSON.stringify(counts, null, 2));
-
-    console.log("Database prerequisites created successfully.");
+    console.log("Fresh seed complete.");
+    console.log(JSON.stringify(counts, null, 2));
+    console.log("Admin login:", process.env.ADMIN_EMAIL || "admin@eco-campus.local", "/", process.env.ADMIN_PASSWORD || "Admin@12345");
+    console.log("Member login sample:", "member.main@eco-campus.local", "/ Member@12345");
+    console.log("Student login sample:", "aman.main@eco-campus.local", "/ Student@12345");
   } catch (error) {
     console.error("Database initialization failed:", error.message || error);
     process.exitCode = 1;
   } finally {
-    // Ensure all writes are flushed before disconnecting
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     await mongoose.disconnect();
   }
 }

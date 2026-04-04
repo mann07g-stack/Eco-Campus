@@ -18,6 +18,63 @@ class ApiService {
     ),
   );
 
+  bool _isConnectivityError(DioException error) {
+    return error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout;
+  }
+
+  Future<T> _withBaseUrlFallback<T>(Future<T> Function() call) async {
+    Object? lastError;
+
+    for (final baseUrl in AppConfig.apiBaseUrlCandidates) {
+      _dio.options.baseUrl = baseUrl;
+      try {
+        return await call();
+      } on DioException catch (error) {
+        lastError = error;
+        if (!_isConnectivityError(error)) {
+          rethrow;
+        }
+      }
+    }
+
+    if (lastError != null) {
+      throw lastError;
+    }
+
+    throw DioException(
+      requestOptions: RequestOptions(path: ""),
+      type: DioExceptionType.unknown,
+      error: "No API base URL candidates available.",
+    );
+  }
+
+  Future<Response<T>> _get<T>(
+    String path, {
+    Object? data,
+    Options? options,
+  }) {
+    return _withBaseUrlFallback(() => _dio.get<T>(path, data: data, options: options));
+  }
+
+  Future<Response<T>> _post<T>(
+    String path, {
+    Object? data,
+    Options? options,
+  }) {
+    return _withBaseUrlFallback(() => _dio.post<T>(path, data: data, options: options));
+  }
+
+  Future<Response<T>> _patch<T>(
+    String path, {
+    Object? data,
+    Options? options,
+  }) {
+    return _withBaseUrlFallback(() => _dio.patch<T>(path, data: data, options: options));
+  }
+
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<void> saveToken(String token) async {
@@ -37,7 +94,7 @@ class ApiService {
     required String campusId,
     required String password,
   }) async {
-    final response = await _dio.post(
+    final response = await _post(
       "/auth/register-user",
       data: {
         "fullName": fullName,
@@ -52,7 +109,7 @@ class ApiService {
   }
 
   Future<Response<dynamic>> login({required String email, required String password}) async {
-    final response = await _dio.post("/auth/login", data: {
+    final response = await _post("/auth/login", data: {
       "email": email,
       "password": password,
     });
@@ -67,7 +124,7 @@ class ApiService {
 
   Future<List<WasteRequest>> getMyRequests() async {
     final token = await getToken();
-    final response = await _dio.get(
+    final response = await _get(
       "/requests/my",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );
@@ -81,7 +138,7 @@ class ApiService {
 
   Future<List<WasteRequest>> getMemberHistory() async {
     final token = await getToken();
-    final response = await _dio.get(
+    final response = await _get(
       "/member/history",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );
@@ -93,7 +150,7 @@ class ApiService {
 
   Future<List<WasteRequest>> getMemberAssignedRequests() async {
     final token = await getToken();
-    final response = await _dio.get(
+    final response = await _get(
       "/member/assigned",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );
@@ -109,7 +166,7 @@ class ApiService {
     required List<String> categories,
   }) async {
     final token = await getToken();
-    await _dio.post(
+    await _post(
       "/requests",
       data: {
         "imageUrl": imageUrls.isNotEmpty ? imageUrls.first : "",
@@ -123,7 +180,7 @@ class ApiService {
 
   Future<void> counterOffer({required String requestId, required double amount, String message = ""}) async {
     final token = await getToken();
-    await _dio.patch(
+    await _patch(
       "/requests/$requestId/counter-offer",
       data: {
         "amount": amount,
@@ -135,7 +192,7 @@ class ApiService {
 
   Future<void> acceptQuote(String requestId) async {
     final token = await getToken();
-    await _dio.patch(
+    await _patch(
       "/requests/$requestId/accept-quote",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );
@@ -143,7 +200,7 @@ class ApiService {
 
   Future<void> cancelRequest(String requestId, {String reason = "Cancelled by user"}) async {
     final token = await getToken();
-    await _dio.patch(
+    await _patch(
       "/requests/$requestId/cancel",
       data: {"reason": reason},
       options: Options(headers: {"Authorization": "Bearer $token"}),
@@ -152,7 +209,7 @@ class ApiService {
 
   Future<String> getQrToken(String requestId) async {
     final token = await getToken();
-    final response = await _dio.get(
+    final response = await _get(
       "/requests/$requestId/qr",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );
@@ -161,7 +218,7 @@ class ApiService {
 
   Future<void> memberScanQr(String qrToken) async {
     final token = await getToken();
-    await _dio.post(
+    await _post(
       "/member/scan",
       data: {"qrToken": qrToken},
       options: Options(headers: {"Authorization": "Bearer $token"}),

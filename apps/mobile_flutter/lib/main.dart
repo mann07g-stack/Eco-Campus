@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "package:flutter_dotenv/flutter_dotenv.dart" as dotenv;
 import "package:flutter/material.dart";
 
@@ -34,8 +36,44 @@ class _EcoCampusAppState extends State<EcoCampusApp> {
   Future<void> _restoreSession() async {
     await Future.delayed(const Duration(milliseconds: 400));
     final token = await ApiService.instance.getToken();
+    final cachedSession = await ApiService.instance.getSession();
+
+    AuthSession? restored;
+    if (token != null && token.isNotEmpty) {
+      restored = cachedSession ?? _sessionFromToken(token);
+      if (restored == null) {
+        await ApiService.instance.clearToken();
+      }
+    }
+
     if (mounted) {
-      setState(() => _isLoadingSession = false);
+      setState(() {
+        _session = restored;
+        _isLoadingSession = false;
+      });
+    }
+  }
+
+  AuthSession? _sessionFromToken(String token) {
+    try {
+      final parts = token.split(".");
+      if (parts.length < 2) return null;
+
+      final payload = parts[1];
+      final normalized = base64Url.normalize(payload);
+      final decoded = utf8.decode(base64Url.decode(normalized));
+      final data = jsonDecode(decoded);
+      if (data is! Map<String, dynamic>) return null;
+
+      return AuthSession(
+        id: (data["id"] ?? data["userId"] ?? data["sub"] ?? "").toString(),
+        fullName: (data["fullName"] ?? data["name"] ?? "").toString(),
+        email: (data["email"] ?? "").toString(),
+        role: (data["role"] ?? "USER").toString(),
+        campusId: (data["campusId"] ?? "").toString(),
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -58,15 +96,15 @@ class _EcoCampusAppState extends State<EcoCampusApp> {
                 colors: [Color(0xFF081A1F), Color(0xFF0B5D5F)],
               ),
             ),
-            child: Center(
+            child: const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.recycling, size: 60, color: Color(0xFFF4A259)),
-                  const SizedBox(height: 20),
-                  const Text("Eco Campus", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(height: 30),
-                  const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Color(0xFFF4A259))),
+                  Icon(Icons.recycling, size: 60, color: Color(0xFFF4A259)),
+                  SizedBox(height: 20),
+                  Text("Eco Campus", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                  SizedBox(height: 30),
+                  CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Color(0xFFF4A259))),
                 ],
               ),
             ),

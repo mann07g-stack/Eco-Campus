@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "package:dio/dio.dart";
 import "package:flutter_secure_storage/flutter_secure_storage.dart";
 
@@ -81,8 +83,41 @@ class ApiService {
     await _storage.write(key: "accessToken", value: token);
   }
 
+  Future<void> saveSession(AuthSession session) async {
+    await _storage.write(
+      key: "authSession",
+      value: jsonEncode({
+        "id": session.id,
+        "fullName": session.fullName,
+        "email": session.email,
+        "role": session.role,
+        "campusId": session.campusId,
+      }),
+    );
+  }
+
+  Future<AuthSession?> getSession() async {
+    final raw = await _storage.read(key: "authSession");
+    if (raw == null || raw.isEmpty) return null;
+
+    try {
+      final map = jsonDecode(raw);
+      if (map is Map<String, dynamic>) {
+        return AuthSession.fromJson(map);
+      }
+      if (map is Map) {
+        return AuthSession.fromJson(Map<String, dynamic>.from(map));
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
+  }
+
   Future<void> clearToken() async {
     await _storage.delete(key: "accessToken");
+    await _storage.delete(key: "authSession");
   }
 
   Future<String?> getToken() => _storage.read(key: "accessToken");

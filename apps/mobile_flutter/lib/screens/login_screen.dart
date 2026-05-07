@@ -23,6 +23,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   final _registerPassword = TextEditingController();
   bool _loading = false;
   bool _registering = false;
+  bool _showLoginPassword = false;
+  bool _showRegisterPassword = false;
   String _error = "";
   String _mode = "login";
   late AnimationController _fadeController;
@@ -60,24 +62,54 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       if (responseData is Map<String, dynamic>) {
         final msg = responseData["message"] ?? responseData["error"];
         if (msg != null) {
-          serverMessage = msg.toString();
+          serverMessage = msg.toString().toLowerCase();
         }
       } else if (responseData != null) {
-        serverMessage = responseData.toString();
+        serverMessage = responseData.toString().toLowerCase();
       }
 
       if (error.type == DioExceptionType.connectionError ||
           error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.receiveTimeout ||
           error.type == DioExceptionType.sendTimeout) {
-        return "Cannot reach API. Check your internet connection.";
+        return "Cannot reach the server. Please check your internet connection.";
       }
 
-      if (statusCode != null) {
-        if (serverMessage.isNotEmpty) {
-          return "Error ($statusCode): $serverMessage";
-        }
-        return "Request failed with status $statusCode.";
+      // Parse server message and provide friendly error
+      if (serverMessage.contains("email")) {
+        return "Invalid email address. Please check and try again.";
+      }
+      if (serverMessage.contains("password")) {
+        return "Incorrect password. Please try again.";
+      }
+      if (serverMessage.contains("not found") || serverMessage.contains("does not exist")) {
+        return "Account not found. Please check your email or register.";
+      }
+      if (serverMessage.contains("already")) {
+        return "This email is already registered. Please log in instead.";
+      }
+      if (serverMessage.contains("validation") || serverMessage.contains("invalid")) {
+        return "Please check all fields are filled correctly.";
+      }
+      if (serverMessage.contains("required")) {
+        return "Please fill in all required fields.";
+      }
+
+      // Status code based messages
+      if (statusCode == 401) {
+        return "Invalid credentials. Please check your email and password.";
+      }
+      if (statusCode == 400) {
+        return "Please check your input. Some fields may be invalid.";
+      }
+      if (statusCode == 404) {
+        return "User account not found. Please register first.";
+      }
+      if (statusCode == 409) {
+        return "This account already exists. Please log in instead.";
+      }
+      if (statusCode == 500) {
+        return "Server error. Please try again later.";
       }
 
       if (serverMessage.isNotEmpty) {
@@ -100,7 +132,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         password: _password.text,
       );
       if (mounted) {
-        widget.onLoggedIn(AuthSession.fromJson(res.data["user"] as Map<String, dynamic>));
+        final session = AuthSession.fromJson(res.data["user"] as Map<String, dynamic>);
+        await ApiService.instance.saveSession(session);
+        widget.onLoggedIn(session);
       }
     } catch (error) {
       if (mounted) {
@@ -180,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFF4A259).withOpacity(0.4),
+                                color: const Color(0xFFF4A259).withValues(alpha: 0.4),
                                 blurRadius: 30,
                                 spreadRadius: 5,
                               ),
@@ -189,8 +223,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                           child: Container(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.08),
-                              border: Border.all(color: Colors.white.withOpacity(0.2), width: 2.5),
+                              color: Colors.white.withValues(alpha: 0.08),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2.5),
                             ),
                             child: const Icon(
                               Icons.recycling,
@@ -226,12 +260,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   // Mode Selector - Beautiful Custom Design
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.08),
+                      color: Colors.white.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 15,
                           offset: const Offset(0, 5),
                         ),
@@ -262,9 +296,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: _error.contains("successfully") ? Colors.green.withOpacity(0.15) : Colors.red.withOpacity(0.15),
+                        color: _error.contains("successfully") ? Colors.green.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15),
                         border: Border.all(
-                          color: _error.contains("successfully") ? Colors.green.withOpacity(0.4) : Colors.red.withOpacity(0.4),
+                          color: _error.contains("successfully") ? Colors.green.withValues(alpha: 0.4) : Colors.red.withValues(alpha: 0.4),
                           width: 1.5,
                         ),
                         borderRadius: BorderRadius.circular(12),
@@ -282,7 +316,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                               _error,
                               style: TextStyle(
                                 color: _error.contains("successfully") ? Colors.green : Colors.red,
-                                fontSize: 12,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -297,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     "♻️ Reduce • Reuse • Recycle ♻️",
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.6),
+                      color: Colors.white.withValues(alpha: 0.6),
                       fontStyle: FontStyle.italic,
                       letterSpacing: 1,
                     ),
@@ -324,7 +358,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFFF4A259).withOpacity(0.4),
+                      color: const Color(0xFFF4A259).withValues(alpha: 0.4),
                       blurRadius: 12,
                       spreadRadius: 2,
                     ),
@@ -367,50 +401,56 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           controller: _password,
           label: "Password",
           icon: Icons.lock_rounded,
-          obscureText: true,
+          obscureText: !_showLoginPassword,
+          suffixIcon: _showLoginPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+          onSuffixTap: () => setState(() => _showLoginPassword = !_showLoginPassword),
           onSubmitted: (_) => _loading ? null : _login(),
         ),
         const SizedBox(height: 28),
-        // Sign In Button with Gradient
-        Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFF4A259), Color(0xFFE89A4C)],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFF4A259).withOpacity(0.4),
-                blurRadius: 15,
-                spreadRadius: 3,
+        // Sign In Button with Gradient - Full Width with Padding
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF4A259), Color(0xFFE89A4C)],
               ),
-            ],
-          ),
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFF4A259).withValues(alpha: 0.4),
+                  blurRadius: 15,
+                  spreadRadius: 3,
+                ),
+              ],
             ),
-            onPressed: _loading ? null : _login,
-            child: _loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(Colors.black87),
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                minimumSize: const Size(double.infinity, 56),
+              ),
+              onPressed: _loading ? null : _login,
+              child: _loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation(Colors.black87),
+                      ),
+                    )
+                  : const Text(
+                      "SIGN IN",
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                        letterSpacing: 1.2,
+                      ),
                     ),
-                  )
-                : const Text(
-                    "SIGN IN",
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
+            ),
           ),
         ),
       ],
@@ -451,50 +491,56 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           controller: _registerPassword,
           label: "Password",
           icon: Icons.lock_rounded,
-          obscureText: true,
+          obscureText: !_showRegisterPassword,
+          suffixIcon: _showRegisterPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+          onSuffixTap: () => setState(() => _showRegisterPassword = !_showRegisterPassword),
           onSubmitted: (_) => _registering ? null : _register(),
         ),
         const SizedBox(height: 28),
-        // Register Button with Gradient
-        Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0B5D5F), Color(0xFF0E7490)],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0B5D5F).withOpacity(0.4),
-                blurRadius: 15,
-                spreadRadius: 3,
+        // Register Button with Gradient - Full Width with Padding
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0B5D5F), Color(0xFF0E7490)],
               ),
-            ],
-          ),
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0B5D5F).withValues(alpha: 0.4),
+                  blurRadius: 15,
+                  spreadRadius: 3,
+                ),
+              ],
             ),
-            onPressed: _registering ? null : _register,
-            child: _registering
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                minimumSize: const Size(double.infinity, 56),
+              ),
+              onPressed: _registering ? null : _register,
+              child: _registering
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      "CREATE ACCOUNT",
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 1.2,
+                      ),
                     ),
-                  )
-                : const Text(
-                    "CREATE ACCOUNT",
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
+            ),
           ),
         ),
       ],
@@ -508,15 +554,17 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     bool obscureText = false,
     TextInputType keyboardType = TextInputType.text,
     Function(String)? onSubmitted,
+    IconData? suffixIcon,
+    VoidCallback? onSuffixTap,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -528,16 +576,30 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         keyboardType: keyboardType,
         onSubmitted: onSubmitted,
         style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w500,
+          color: Color(0xFF081A1F),
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
         ),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.grey[500],
             fontWeight: FontWeight.w500,
+            fontSize: 14,
+          ),
+          hintText: label,
+          hintStyle: TextStyle(
+            color: Colors.grey[400],
+            fontWeight: FontWeight.w400,
           ),
           prefixIcon: Icon(icon, color: const Color(0xFFF4A259), size: 22),
+          suffixIcon: suffixIcon == null
+              ? null
+              : IconButton(
+                  onPressed: onSuffixTap,
+                  splashRadius: 20,
+                  icon: Icon(suffixIcon, color: const Color(0xFF5E6A6E), size: 21),
+                ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
           floatingLabelBehavior: FloatingLabelBehavior.never,

@@ -70,12 +70,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.receiveTimeout ||
           error.type == DioExceptionType.sendTimeout) {
-        return "Cannot reach API. Check that backend is running and your device can connect.";
+        return "Cannot reach API. Check your internet connection.";
       }
 
       if (statusCode != null) {
         if (serverMessage.isNotEmpty) {
-          return "Request failed ($statusCode): $serverMessage";
+          return "Error ($statusCode): $serverMessage";
         }
         return "Request failed with status $statusCode.";
       }
@@ -99,9 +99,13 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         email: _email.text.trim(),
         password: _password.text,
       );
-      widget.onLoggedIn(AuthSession.fromJson(res.data["user"] as Map<String, dynamic>));
+      if (mounted) {
+        widget.onLoggedIn(AuthSession.fromJson(res.data["user"] as Map<String, dynamic>));
+      }
     } catch (error) {
-      setState(() => _error = _formatError(error, fallback: "Login failed. Please verify credentials."));
+      if (mounted) {
+        setState(() => _error = _formatError(error, fallback: "Login failed. Please verify credentials."));
+      }
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -127,10 +131,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       setState(() {
         _mode = "login";
         _password.clear();
-        _error = "Account created. You can log in now.";
+        _error = "Account created successfully! You can now log in.";
       });
     } catch (error) {
-      setState(() => _error = _formatError(error, fallback: "Registration failed. Please check the details."));
+      if (mounted) {
+        setState(() => _error = _formatError(error, fallback: "Registration failed. Please check the details."));
+      }
     } finally {
       if (mounted) {
         setState(() => _registering = false);
@@ -159,14 +165,14 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               ),
               child: Column(
                 children: [
-                  // Logo & Branding Section
+                  // Logo & Branding Section with Animation
                   SlideTransition(
                     position: Tween<Offset>(begin: const Offset(0, -0.3), end: Offset.zero).animate(
                       CurvedAnimation(parent: _slideController, curve: Curves.easeOut),
                     ),
                     child: Column(
                       children: [
-                        // Animated Recycling Icon
+                        // Animated Recycling Icon with Glow
                         Container(
                           width: 110,
                           height: 110,
@@ -250,25 +256,32 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                       child: _mode == "login" ? _buildLoginForm() : _buildRegisterForm(),
                     ),
                   ),
-                  // Error Display
+                  // Error Display with Icon
                   if (_error.isNotEmpty) ...[
                     const SizedBox(height: 18),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.15),
-                        border: Border.all(color: Colors.red.withOpacity(0.4), width: 1.5),
+                        color: _error.contains("successfully") ? Colors.green.withOpacity(0.15) : Colors.red.withOpacity(0.15),
+                        border: Border.all(
+                          color: _error.contains("successfully") ? Colors.green.withOpacity(0.4) : Colors.red.withOpacity(0.4),
+                          width: 1.5,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.warning_rounded, color: Colors.red, size: 20),
+                          Icon(
+                            _error.contains("successfully") ? Icons.check_circle_rounded : Icons.warning_rounded,
+                            color: _error.contains("successfully") ? Colors.green : Colors.red,
+                            size: 20,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               _error,
-                              style: const TextStyle(
-                                color: Colors.red,
+                              style: TextStyle(
+                                color: _error.contains("successfully") ? Colors.green : Colors.red,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),

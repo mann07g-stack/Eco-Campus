@@ -1,9 +1,13 @@
 import "dart:io" show Platform;
 
+import "package:flutter_dotenv/flutter_dotenv.dart" as dotenv;
 import "package:flutter/foundation.dart" show kIsWeb;
 
 class AppConfig {
   static List<String> get apiBaseUrlCandidates {
+    final fromEnv = dotenv.dotenv.env["FLUTTER_API_BASE_URL"] ?? "";
+    if (fromEnv.isNotEmpty) return [fromEnv];
+
     const fromDefine = String.fromEnvironment("FLUTTER_API_BASE_URL", defaultValue: "");
     if (fromDefine.isNotEmpty) return [fromDefine];
 

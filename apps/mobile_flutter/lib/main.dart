@@ -1,3 +1,4 @@
+import "package:flutter_dotenv/flutter_dotenv.dart" as dotenv;
 import "package:flutter/material.dart";
 
 import "models/auth_session.dart";
@@ -7,7 +8,9 @@ import "screens/home_screen.dart";
 import "screens/login_screen.dart";
 import "screens/member_scan_screen.dart";
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.dotenv.load(fileName: ".env");
   runApp(const EcoCampusApp());
 }
 
@@ -20,13 +23,58 @@ class EcoCampusApp extends StatefulWidget {
 
 class _EcoCampusAppState extends State<EcoCampusApp> {
   AuthSession? _session;
+  bool _isLoadingSession = true;
 
-  void _logout() {
+  @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+  }
+
+  Future<void> _restoreSession() async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    final token = await ApiService.instance.getToken();
+    if (mounted) {
+      setState(() => _isLoadingSession = false);
+    }
+  }
+
+  Future<void> _logout() async {
+    await ApiService.instance.clearToken();
     setState(() => _session = null);
   }
 
   @override
   Widget build(BuildContext context) {
+    // Show splash while checking for saved session
+    if (_isLoadingSession) {
+      return MaterialApp(
+        home: Scaffold(
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF081A1F), Color(0xFF0B5D5F)],
+              ),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.recycling, size: 60, color: Color(0xFFF4A259)),
+                  const SizedBox(height: 20),
+                  const Text("Eco Campus", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 30),
+                  const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Color(0xFFF4A259))),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final base = ThemeData(
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B5D5F), brightness: Brightness.light),
       useMaterial3: true,
@@ -34,6 +82,7 @@ class _EcoCampusAppState extends State<EcoCampusApp> {
 
     return MaterialApp(
       title: "Eco Campus",
+      debugShowCheckedModeBanner: false,
       theme: base.copyWith(
         scaffoldBackgroundColor: const Color(0xFFF5F7F3),
         appBarTheme: const AppBarTheme(

@@ -94,16 +94,38 @@ export default function App() {
     if (!opts.silent) setIsLoadingData(true);
 
     try {
-      const [overviewRes, requestRes, membersRes] = await Promise.all([
+      const [overviewRes, requestRes, membersRes] = await Promise.allSettled([
         api.get<OverviewResponse>("/admin/analytics/overview"),
         api.get<{ requests: RequestItem[] }>("/admin/requests"),
         api.get<{ members: MemberItem[] }>("/admin/members")
       ]);
-      setOverview(overviewRes.data);
-      setRequests(requestRes.data.requests);
-      setMembers(membersRes.data.members);
+
+      const errorLabels: string[] = [];
+
+      if (overviewRes.status === "fulfilled") {
+        setOverview(overviewRes.value.data);
+      } else {
+        errorLabels.push("overview");
+      }
+
+      if (requestRes.status === "fulfilled") {
+        setRequests(requestRes.value.data.requests);
+      } else {
+        errorLabels.push("requests");
+      }
+
+      if (membersRes.status === "fulfilled") {
+        setMembers(membersRes.value.data.members);
+      } else {
+        errorLabels.push("members");
+      }
+
       if (!opts.silent) {
-        setMessage("Data refreshed successfully.");
+        setMessage(
+          errorLabels.length > 0
+            ? `Some admin data could not load (${errorLabels.join(", ")}). Showing what is available.`
+            : "Data refreshed successfully."
+        );
       }
     } catch {
       setMessage("Data load is slow right now. Please retry in a few seconds.");

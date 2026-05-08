@@ -65,11 +65,11 @@ memberRouter.post("/scan", async (req: AuthRequest, res) => {
 
     tokenDoc.isUsed = true;
     tokenDoc.usedAt = new Date();
-    tokenDoc.usedByMemberId = req.user!.id;
+    tokenDoc.usedByMemberId = String(req.user!.id) as any;
     await tokenDoc.save();
 
     request.status = "COLLECTED";
-    request.collectedByMemberId = req.user!.id;
+    request.collectedByMemberId = String(req.user!.id) as any;
     request.collectedAt = new Date();
     await request.save();
 

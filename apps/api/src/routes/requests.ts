@@ -83,7 +83,7 @@ requestRouter.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   return res.json({ request, negotiation });
 });
 
-requestRouter.patch("/:id/quote", requireAuth, requireRole("ADMIN"), async (req, res) => {
+requestRouter.patch("/:id/quote", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.flatten() });
@@ -250,7 +250,7 @@ requestRouter.get("/:id/qr", requireAuth, requireRole("USER"), async (req: AuthR
       });
     }
 
-    request.assignedMemberId = assignedMember._id;
+    request.assignedMemberId = String(assignedMember._id) as any;
     request.assignedAt = new Date();
   }
 
@@ -262,7 +262,7 @@ requestRouter.get("/:id/qr", requireAuth, requireRole("USER"), async (req: AuthR
   });
 
   request.status = "QR_ISSUED";
-  request.qrTokenId = tokenDoc._id;
+  request.qrTokenId = String(tokenDoc._id) as any;
   await request.save();
 
   const assignedMember = request.assignedMemberId

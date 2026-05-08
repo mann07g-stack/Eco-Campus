@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { requireAuth, requireRole } from "../middleware/auth";
+import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { UserModel } from "../models/User";
 import { RequestModel } from "../models/Request";
 import { NegotiationModel } from "../models/Negotiation";
@@ -72,7 +72,7 @@ adminRouter.get("/requests", async (req, res) => {
   return res.json({ requests: mergedRequests, total: totalCount, skip, limit });
 });
 
-adminRouter.patch("/requests/:id/quote", async (req, res) => {
+adminRouter.patch("/requests/:id/quote", async (req: AuthRequest, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.flatten() });
@@ -105,7 +105,7 @@ adminRouter.patch("/requests/:id/quote", async (req, res) => {
   return res.json({ request });
 });
 
-adminRouter.patch("/requests/:id/reject", async (req, res) => {
+adminRouter.patch("/requests/:id/reject", async (req: AuthRequest, res) => {
   const parsed = rejectSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.flatten() });

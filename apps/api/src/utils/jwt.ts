@@ -9,7 +9,7 @@ type JwtPayload = {
 };
 
 export function createAccessToken(payload: JwtPayload) {
-  return jwt.sign(payload, env.accessSecret, { expiresIn: env.accessTtl });
+  return jwt.sign(payload, env.accessSecret, { expiresIn: env.accessTtl } as any);
 }
 
 export function verifyAccessToken(token: string) {

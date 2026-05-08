@@ -5,6 +5,48 @@ export const api = axios.create({
   timeout: 20000
 });
 
+export function describeApiError(error: unknown, fallback: string) {
+  if (!axios.isAxiosError(error)) {
+    return fallback;
+  }
+
+  const status = error.response?.status;
+  if (!status) {
+    if (error.code === "ECONNABORTED") {
+      return "The API is taking longer than usual to respond. Retry in a few seconds.";
+    }
+
+    return "The API is unreachable right now. Check the deployment and try again.";
+  }
+
+  if (status === 401) {
+    return "Your admin session is invalid or expired. Sign in again.";
+  }
+
+  if (status === 403) {
+    return "You do not have permission for that action.";
+  }
+
+  if (status === 404) {
+    return "The requested API route was not found.";
+  }
+
+  if (status === 429) {
+    return "The API is rate-limiting requests. Retry shortly.";
+  }
+
+  if (status >= 500) {
+    return "The API is temporarily unavailable. It may still be waking up.";
+  }
+
+  const responseMessage = error.response?.data as { message?: unknown } | undefined;
+  if (typeof responseMessage?.message === "string" && responseMessage.message.trim()) {
+    return responseMessage.message;
+  }
+
+  return fallback;
+}
+
 const authTokenKey = "eco-campus-admin-token";
 
 export function getAuthToken() {

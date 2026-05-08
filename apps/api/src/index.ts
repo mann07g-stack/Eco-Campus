@@ -8,22 +8,34 @@ import { requestRouter } from "./routes/requests";
 import { adminRouter } from "./routes/admin";
 import { memberRouter } from "./routes/member";
 
-async function bootstrap() {
+function normalizeOrigin(origin: string) {
+  return origin.replace(/\/+$/, "");
+}
+
+function buildAllowedOrigins() {
+  return new Set(
+    [
+      env.clientUrl,
+      ...env.clientUrls,
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    ].map(normalizeOrigin)
+  );
+}
+
+async function createApp() {
   validateEnv();
   await connectDb();
 
   const app = express();
-
-  const allowedOrigins = new Set([
-    env.clientUrl,
-    "http://localhost:5173",
-    "http://127.0.0.1:5173"
-  ]);
+  const allowedOrigins = buildAllowedOrigins();
 
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || allowedOrigins.has(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        const normalizedOrigin = origin ? normalizeOrigin(origin) : "";
+
+        if (!origin || allowedOrigins.has(normalizedOrigin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)) {
           return callback(null, true);
         }
 
@@ -48,14 +60,37 @@ async function bootstrap() {
     res.status(404).json({ message: "Route not found" });
   });
 
-  app.listen(env.port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`API running on http://localhost:${env.port}`);
-  });
+  return app;
 }
 
-bootstrap().catch((error) => {
-  // eslint-disable-next-line no-console
-  console.error(error);
-  process.exit(1);
-});
+let appPromise: Promise<express.Express> | null = null;
+
+function getApp() {
+  if (!appPromise) {
+    appPromise = createApp();
+  }
+
+  return appPromise;
+}
+
+async function handler(req: express.Request, res: express.Response) {
+  const app = await getApp();
+  return app(req, res);
+}
+
+if (!process.env.VERCEL) {
+  void getApp()
+    .then((app) => {
+      app.listen(env.port, () => {
+        // eslint-disable-next-line no-console
+        console.log(`API running on http://localhost:${env.port}`);
+      });
+    })
+    .catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      process.exit(1);
+    });
+}
+
+export = handler;

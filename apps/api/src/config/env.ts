@@ -2,6 +2,17 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function parseCsv(value: string) {
+  return value
+    .split(",")
+    .map((entry) => trimTrailingSlash(entry.trim()))
+    .filter(Boolean);
+}
+
 export const env = {
   port: Number(process.env.PORT || 5000),
   mongodbUri: process.env.MONGODB_URI || "",
@@ -10,7 +21,8 @@ export const env = {
   refreshSecret: process.env.JWT_REFRESH_SECRET || "",
   accessTtl: process.env.ACCESS_TOKEN_TTL || "15m",
   refreshTtl: process.env.REFRESH_TOKEN_TTL || "7d",
-  clientUrl: process.env.CLIENT_URL || "http://localhost:5173"
+  clientUrl: trimTrailingSlash(process.env.CLIENT_URL || "http://localhost:5173"),
+  clientUrls: parseCsv(process.env.CLIENT_URLS || "")
 };
 
 export function validateEnv() {

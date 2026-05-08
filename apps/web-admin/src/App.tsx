@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart, Bar, CartesianGrid, Legend, LineChart, Line, PieChart, Pie, Cell, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
-import { api, clearAuthToken, getAuthToken, LoginResponse, MemberPayload, OverviewResponse, setAuthToken } from "./api/client";
+import { api, clearAuthToken, describeApiError, getAuthToken, LoginResponse, MemberPayload, OverviewResponse, setAuthToken } from "./api/client";
 
 type RequestItem = {
   _id: string;
@@ -140,8 +140,8 @@ export default function App() {
             : "Data refreshed successfully."
         );
       }
-    } catch {
-      setMessage("Data load is slow right now. Please retry in a few seconds.");
+    } catch (error) {
+      setMessage(describeApiError(error, "Data load is slow right now. Please retry in a few seconds."));
     } finally {
       isRefreshingRef.current = false;
       if (!opts.silent) setIsLoadingData(false);
@@ -158,8 +158,8 @@ export default function App() {
       });
       setRequests((prev) => [...prev, ...res.data.requests]);
       setRequestsSkip(res.data.skip + res.data.limit);
-    } catch {
-      setMessage("Failed to load more requests.");
+    } catch (error) {
+      setMessage(describeApiError(error, "Failed to load more requests."));
     } finally {
       setIsLoadingMore(false);
     }
@@ -190,10 +190,10 @@ export default function App() {
       setIsAuthenticated(true);
       setMessage(`Logged in as ${response.data.user.fullName}.`);
       await loadData();
-    } catch {
+    } catch (error) {
       clearAuthToken();
       setIsAuthenticated(false);
-      setMessage("Login failed. Check the admin email and password.");
+      setMessage(describeApiError(error, "Login failed. Check the admin email and password."));
     }
   }
 
@@ -258,8 +258,8 @@ export default function App() {
       setMemberForm(initialMember);
       setMessage("Campus member registered successfully.");
       await loadData();
-    } catch {
-      setMessage("Failed to register member. Check API auth and payload.");
+    } catch (error) {
+      setMessage(describeApiError(error, "Failed to register member. Check API auth and payload."));
     }
   }
 
@@ -280,8 +280,8 @@ export default function App() {
       });
       setMessage("Quote updated successfully.");
       await loadData();
-    } catch {
-      setMessage("Unable to set quote for this request.");
+    } catch (error) {
+      setMessage(describeApiError(error, "Unable to set quote for this request."));
     } finally {
       setBusyRequestId("");
     }
@@ -297,8 +297,8 @@ export default function App() {
       });
       setMessage("Request denied.");
       await loadData();
-    } catch {
-      setMessage("Unable to reject request.");
+    } catch (error) {
+      setMessage(describeApiError(error, "Unable to reject request."));
     } finally {
       setBusyRequestId("");
     }

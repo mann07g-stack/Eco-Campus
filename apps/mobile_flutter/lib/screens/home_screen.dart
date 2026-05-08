@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final requests = await ApiService.instance.getMyRequests();
       setState(() => _requests = requests);
     } catch (_) {
-      setState(() => _error = "Failed to load requests");
+      setState(() => _error = "Failed to load requests. Server may be waking up, please refresh once.");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -176,6 +176,46 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openImageViewer(List<String> images, int initialIndex) async {
+    if (images.isEmpty) return;
+
+    final controller = PageController(initialPage: initialIndex);
+
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) {
+        return Dialog.fullscreen(
+          child: Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+              title: Text("Image ${initialIndex + 1}/${images.length}"),
+            ),
+            body: PageView.builder(
+              controller: controller,
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                return Center(
+                  child: InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4,
+                    child: Image.network(
+                      images[index],
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 56),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         );
       },
@@ -345,24 +385,30 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 const SizedBox(height: 8),
                 if (request.imageUrls.isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.network(
-                      request.imageUrls.first,
-                      height: 180,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                  GestureDetector(
+                    onTap: () => _openImageViewer(request.imageUrls, 0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
                         height: 180,
-                        alignment: Alignment.center,
-                        color: Colors.black12,
-                        child: const Icon(Icons.image_not_supported_outlined),
+                        color: const Color(0xFFF1F4F2),
+                        child: Image.network(
+                          request.imageUrls.first,
+                          width: double.infinity,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 180,
+                            alignment: Alignment.center,
+                            color: Colors.black12,
+                            child: const Icon(Icons.image_not_supported_outlined),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 if (request.imageUrls.length > 1) ...[
                   const SizedBox(height: 8),
-                  Text("${request.imageUrls.length} photos attached"),
+                  Text("${request.imageUrls.length} photos attached (tap image to open full view)"),
                 ],
                 const SizedBox(height: 12),
                 Wrap(

@@ -61,6 +61,33 @@ class ApiService {
     return _withBaseUrlFallback(() => _dio.get<T>(path, data: data, options: options));
   }
 
+  Future<Response<T>> _getWithRetry<T>(
+    String path, {
+    Object? data,
+    Options? options,
+    int attempts = 2,
+  }) async {
+    DioException? lastError;
+
+    for (var i = 0; i < attempts; i++) {
+      try {
+        return await _get<T>(path, data: data, options: options);
+      } on DioException catch (error) {
+        lastError = error;
+        if (!_isConnectivityError(error) || i == attempts - 1) {
+          rethrow;
+        }
+        await Future.delayed(Duration(milliseconds: 500 * (i + 1)));
+      }
+    }
+
+    throw lastError ??
+        DioException(
+          requestOptions: RequestOptions(path: path),
+          type: DioExceptionType.unknown,
+        );
+  }
+
   Future<Response<T>> _post<T>(
     String path, {
     Object? data,
@@ -159,7 +186,7 @@ class ApiService {
 
   Future<List<WasteRequest>> getMyRequests() async {
     final token = await getToken();
-    final response = await _get(
+    final response = await _getWithRetry(
       "/requests/my",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );
@@ -173,7 +200,7 @@ class ApiService {
 
   Future<List<WasteRequest>> getMemberHistory() async {
     final token = await getToken();
-    final response = await _get(
+    final response = await _getWithRetry(
       "/member/history",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );
@@ -185,7 +212,7 @@ class ApiService {
 
   Future<List<WasteRequest>> getMemberAssignedRequests() async {
     final token = await getToken();
-    final response = await _get(
+    final response = await _getWithRetry(
       "/member/assigned",
       options: Options(headers: {"Authorization": "Bearer $token"}),
     );

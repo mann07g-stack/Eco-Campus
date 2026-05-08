@@ -29,27 +29,72 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole("ADMIN"));
 
 adminRouter.get("/requests", async (_req, res) => {
-  const requests = await RequestModel.find()
-    .sort({ createdAt: -1 })
-    .populate("userId", "fullName email phone campusId")
-    .lean();
+  const requests = await RequestModel.aggregate([
+    { $sort: { createdAt: -1 } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user"
+      }
+    },
+    {
+      $unwind: {
+        path: "$user",
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $lookup: {
+        from: "negotiations",
+        let: { requestId: "$_id" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$requestId", "$$requestId"] } } },
+          { $sort: { createdAt: -1 } },
+          {
+            $group: {
+              _id: "$requestId",
+              latestNegotiation: { $first: "$$ROOT" },
+              negotiationCount: { $sum: 1 }
+            }
+          }
+        ],
+        as: "negotiationMeta"
+      }
+    },
+    {
+      $unwind: {
+        path: "$negotiationMeta",
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        description: 1,
+        imageUrl: 1,
+        imageUrls: 1,
+        status: 1,
+        currentQuote: 1,
+        adminQuote: 1,
+        adminQuoteMessage: 1,
+        lastUserCounterMessage: 1,
+        quotePendingForUser: 1,
+        createdAt: 1,
+        userId: {
+          fullName: "$user.fullName",
+          email: "$user.email",
+          phone: "$user.phone",
+          campusId: "$user.campusId"
+        },
+        latestNegotiation: "$negotiationMeta.latestNegotiation",
+        negotiationCount: { $ifNull: ["$negotiationMeta.negotiationCount", 0] }
+      }
+    }
+  ]);
 
-  const requestsWithNegotiation = await Promise.all(
-    requests.map(async (request) => {
-      const latestNegotiation = await NegotiationModel.findOne({ requestId: request._id })
-        .sort({ createdAt: -1 })
-        .lean();
-
-      const negotiationCount = await NegotiationModel.countDocuments({ requestId: request._id });
-
-      return {
-        ...request,
-        latestNegotiation,
-        negotiationCount
-      };
-    })
-  );
-  return res.json({ requests: requestsWithNegotiation });
+  return res.json({ requests });
 });
 
 adminRouter.patch("/requests/:id/quote", async (req, res) => {

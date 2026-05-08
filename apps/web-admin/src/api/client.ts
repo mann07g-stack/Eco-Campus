@@ -1,7 +1,8 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api"
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  timeout: 20000
 });
 
 const authTokenKey = "eco-campus-admin-token";
@@ -35,6 +36,29 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config as (typeof error.config & { __retryCount?: number }) | undefined;
+    if (!config) throw error;
+
+    const method = String(config.method || "get").toLowerCase();
+    const status = error.response?.status;
+    const retryableStatus = status === 429 || status === 502 || status === 503 || status === 504;
+    const networkIssue = !error.response;
+    const shouldRetry = method === "get" && (retryableStatus || networkIssue);
+
+    if (!shouldRetry) throw error;
+
+    const retries = Number(config.__retryCount || 0);
+    if (retries >= 1) throw error;
+
+    config.__retryCount = retries + 1;
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return api.request(config);
+  }
+);
 
 export type OverviewResponse = {
   totalRequests: number;

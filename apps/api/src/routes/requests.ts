@@ -64,7 +64,8 @@ requestRouter.get("/my", requireAuth, async (req: AuthRequest, res) => {
   const query = req.user!.role === "USER" ? { userId: req.user!.id } : {};
   const requests = await RequestModel.find(query)
     .sort({ createdAt: -1 })
-    .populate("assignedMemberId", "fullName phone campusId");
+    .populate("assignedMemberId", "fullName phone campusId")
+    .lean();
   return res.json({ requests });
 });
 

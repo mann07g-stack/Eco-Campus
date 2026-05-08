@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart, Bar, CartesianGrid, Legend, LineChart, Line, PieChart, Pie, Cell, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { api, clearAuthToken, getAuthToken, LoginResponse, MemberPayload, OverviewResponse, setAuthToken } from "./api/client";
 
@@ -62,8 +62,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [busyRequestId, setBusyRequestId] = useState<string>("");
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const [quoteAmountByRequest, setQuoteAmountByRequest] = useState<Record<string, string>>({});
   const [quoteMessageByRequest, setQuoteMessageByRequest] = useState<Record<string, string>>({});
+  const isRefreshingRef = useRef(false);
+  const [activeImageUrl, setActiveImageUrl] = useState<string>("");
   const [loginForm, setLoginForm] = useState({
     email: "admin@eco-campus.local",
     password: "Admin@12345"
@@ -79,13 +82,17 @@ export default function App() {
     if (!isAuthenticated) return;
 
     const timer = setInterval(() => {
-      void loadData();
+      void loadData({ silent: true });
     }, 12000);
 
     return () => clearInterval(timer);
   }, [isAuthenticated]);
 
-  async function loadData() {
+  async function loadData(opts: { silent?: boolean } = {}) {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    if (!opts.silent) setIsLoadingData(true);
+
     try {
       const [overviewRes, requestRes, membersRes] = await Promise.all([
         api.get<OverviewResponse>("/admin/analytics/overview"),
@@ -95,10 +102,14 @@ export default function App() {
       setOverview(overviewRes.data);
       setRequests(requestRes.data.requests);
       setMembers(membersRes.data.members);
+      if (!opts.silent) {
+        setMessage("Data refreshed successfully.");
+      }
     } catch {
-      clearAuthToken();
-      setIsAuthenticated(false);
-      setMessage("Unable to load admin data. Please log in again.");
+      setMessage("Data load is slow right now. Please retry in a few seconds.");
+    } finally {
+      isRefreshingRef.current = false;
+      if (!opts.silent) setIsLoadingData(false);
     }
   }
 
@@ -235,7 +246,9 @@ export default function App() {
         </div>
         {isAuthenticated ? (
           <div className="topbar-actions">
-            <button className="ghost-btn" type="button" onClick={() => void loadData()}>Refresh</button>
+            <button className="ghost-btn" type="button" disabled={isLoadingData} onClick={() => void loadData()}>
+              {isLoadingData ? "Refreshing..." : "Refresh"}
+            </button>
             <button className="ghost-btn" type="button" onClick={handleLogout}>Log out</button>
           </div>
         ) : null}
@@ -377,7 +390,15 @@ export default function App() {
                       {previewImages.length > 0 ? (
                         <div className="image-strip">
                           {previewImages.slice(0, 4).map((url, idx) => (
-                            <img key={`${request._id}-${idx}`} src={url} alt="waste preview" />
+                            <button
+                              key={`${request._id}-${idx}`}
+                              className="thumb-btn"
+                              type="button"
+                              onClick={() => setActiveImageUrl(url)}
+                              title="Open full image"
+                            >
+                              <img src={url} alt="waste preview" />
+                            </button>
                           ))}
                         </div>
                       ) : null}
@@ -396,8 +417,12 @@ export default function App() {
                           onChange={(e) => setQuoteMessageByRequest((prev) => ({ ...prev, [request._id]: e.target.value }))}
                         />
                         <div className="row-btns">
-                          <button disabled={busyRequestId === request._id || isClosedForAdmin} onClick={() => void submitQuote(request._id)} type="button">Send Quote</button>
-                          <button disabled={busyRequestId === request._id || isClosedForAdmin} className="danger" onClick={() => void rejectRequest(request._id)} type="button">Deny</button>
+                          <button disabled={busyRequestId === request._id || isClosedForAdmin} onClick={() => void submitQuote(request._id)} type="button">
+                            {busyRequestId === request._id ? "Working..." : "Send Quote"}
+                          </button>
+                          <button disabled={busyRequestId === request._id || isClosedForAdmin} className="danger" onClick={() => void rejectRequest(request._id)} type="button">
+                            {busyRequestId === request._id ? "Working..." : "Deny"}
+                          </button>
                         </div>
                         {isClosedForAdmin ? <p className="subtle">This request is closed. Quote/deny actions are disabled.</p> : null}
                       </div>
@@ -452,6 +477,25 @@ export default function App() {
           ) : null}
 
           {message ? <p className="message global-message">{message}</p> : null}
+
+          {activeImageUrl ? (
+            <div className="lightbox" role="dialog" aria-modal="true" onClick={() => setActiveImageUrl("")}>
+              <button
+                className="lightbox-close"
+                type="button"
+                onClick={() => setActiveImageUrl("")}
+                aria-label="Close image"
+              >
+                Close
+              </button>
+              <img
+                className="lightbox-image"
+                src={activeImageUrl}
+                alt="Full request image"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          ) : null}
         </>
       )}
     </div>

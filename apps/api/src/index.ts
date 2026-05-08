@@ -33,7 +33,7 @@ async function bootstrap() {
     })
   );
   app.use(express.json({ limit: "5mb" }));
-  app.use(morgan("dev"));
+  app.use(morgan("dev", { skip: (req) => req.method === "OPTIONS" }));
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", service: "eco-campus-api" });

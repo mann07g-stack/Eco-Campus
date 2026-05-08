@@ -31,6 +31,7 @@ const requestSchema = new Schema(
 );
 
 requestSchema.index({ userId: 1, createdAt: -1 });
+requestSchema.index({ createdAt: -1 });
 requestSchema.index({ assignedMemberId: 1, status: 1, assignedAt: -1, createdAt: -1 });
 requestSchema.index({ collectedByMemberId: 1, collectedAt: -1 });
 requestSchema.index({ campusId: 1, status: 1, createdAt: -1 });

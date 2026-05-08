@@ -29,6 +29,13 @@ type RequestItem = {
   negotiationCount?: number;
 };
 
+type RequestsResponse = {
+  requests: RequestItem[];
+  total: number;
+  skip: number;
+  limit: number;
+};
+
 type MemberItem = {
   _id: string;
   fullName: string;
@@ -65,6 +72,10 @@ export default function App() {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [quoteAmountByRequest, setQuoteAmountByRequest] = useState<Record<string, string>>({});
   const [quoteMessageByRequest, setQuoteMessageByRequest] = useState<Record<string, string>>({});
+  const [requestsTotal, setRequestsTotal] = useState(0);
+  const [requestsSkip, setRequestsSkip] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const requestListRef = useRef<HTMLDivElement>(null);
   const isRefreshingRef = useRef(false);
   const [activeImageUrl, setActiveImageUrl] = useState<string>("");
   const [loginForm, setLoginForm] = useState({
@@ -96,7 +107,7 @@ export default function App() {
     try {
       const [overviewRes, requestRes, membersRes] = await Promise.allSettled([
         api.get<OverviewResponse>("/admin/analytics/overview"),
-        api.get<{ requests: RequestItem[] }>("/admin/requests"),
+        api.get<RequestsResponse>("/admin/requests", { params: { skip: 0, limit: 20 } }),
         api.get<{ members: MemberItem[] }>("/admin/members")
       ]);
 
@@ -110,6 +121,8 @@ export default function App() {
 
       if (requestRes.status === "fulfilled") {
         setRequests(requestRes.value.data.requests);
+        setRequestsTotal(requestRes.value.data.total);
+        setRequestsSkip(requestRes.value.data.limit);
       } else {
         errorLabels.push("requests");
       }
@@ -134,6 +147,38 @@ export default function App() {
       if (!opts.silent) setIsLoadingData(false);
     }
   }
+
+  async function loadMoreRequests() {
+    if (isLoadingMore || requestsSkip >= requestsTotal) return;
+    setIsLoadingMore(true);
+
+    try {
+      const res = await api.get<RequestsResponse>("/admin/requests", {
+        params: { skip: requestsSkip, limit: 20 }
+      });
+      setRequests((prev) => [...prev, ...res.data.requests]);
+      setRequestsSkip(res.data.skip + res.data.limit);
+    } catch {
+      setMessage("Failed to load more requests.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!requestListRef.current || activeTab !== "requests") return;
+
+    const el = requestListRef.current;
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollHeight - scrollTop - clientHeight < 200) {
+        void loadMoreRequests();
+      }
+    };
+
+    el.addEventListener("scroll", handleScroll);
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [activeTab, requestsSkip, requestsTotal, isLoadingMore]);
 
   async function submitLogin(event: FormEvent) {
     event.preventDefault();
@@ -375,7 +420,7 @@ export default function App() {
               </div>
               <p className="subtle">Set quote values, add notes, or deny requests from one place.</p>
 
-              <div className="request-list">
+              <div className="request-list" ref={requestListRef}>
                 {filteredRequests.map((request) => {
                   const previewImages = request.imageUrls?.length ? request.imageUrls : request.imageUrl ? [request.imageUrl] : [];
                   const adminQuote = request.adminQuote && request.adminQuote > 0 ? request.adminQuote : request.currentQuote;
@@ -451,6 +496,9 @@ export default function App() {
                     </article>
                   );
                 })}
+                {isLoadingMore ? <p className="subtle" style={{ textAlign: "center", padding: "20px" }}>Loading more requests...</p> : null}
+                {requests.length > 0 && requests.length >= requestsTotal ? <p className="subtle" style={{ textAlign: "center", padding: "20px" }}>No more requests to load</p> : null}
+                {filteredRequests.length === 0 && requests.length > 0 ? <p className="subtle" style={{ textAlign: "center", padding: "20px" }}>No requests match the selected status</p> : null}
               </div>
             </section>
           ) : null}

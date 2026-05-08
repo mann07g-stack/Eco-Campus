@@ -28,10 +28,15 @@ export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRole("ADMIN"));
 
-adminRouter.get("/requests", async (_req, res) => {
-  const [requests, negotiationMeta] = await Promise.all([
+adminRouter.get("/requests", async (req, res) => {
+  const skip = Math.max(0, Number(req.query.skip) || 0);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+
+  const [requests, negotiationMeta, totalCount] = await Promise.all([
     RequestModel.find()
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .select(
         "_id description imageUrl imageUrls status currentQuote adminQuote adminQuoteMessage lastUserCounterMessage quotePendingForUser createdAt userId"
       )
@@ -46,7 +51,8 @@ adminRouter.get("/requests", async (_req, res) => {
           negotiationCount: { $sum: 1 }
         }
       }
-    ])
+    ]),
+    RequestModel.countDocuments()
   ]);
 
   const metaByRequestId = new Map(
@@ -63,7 +69,7 @@ adminRouter.get("/requests", async (_req, res) => {
     };
   });
 
-  return res.json({ requests: mergedRequests });
+  return res.json({ requests: mergedRequests, total: totalCount, skip, limit });
 });
 
 adminRouter.patch("/requests/:id/quote", async (req, res) => {

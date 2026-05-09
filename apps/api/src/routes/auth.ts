@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { UserModel } from "../models/User";
 import { createAccessToken } from "../utils/jwt";
+import { createRateLimiter } from "../middleware/rateLimiter";
 
 const registerSchema = z.object({
   fullName: z.string().min(2),
@@ -20,7 +21,9 @@ const loginSchema = z.object({
 
 export const authRouter = Router();
 
-authRouter.post("/register-user", async (req, res) => {
+const authWriteLimiter = createRateLimiter({ prefix: "auth-write", limit: 10, window: "1 m" });
+
+authRouter.post("/register-user", authWriteLimiter, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.flatten() });
@@ -50,7 +53,7 @@ authRouter.post("/register-user", async (req, res) => {
   });
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", authWriteLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.flatten() });

@@ -22,7 +22,9 @@ export const env = {
   accessTtl: process.env.ACCESS_TOKEN_TTL || "15m",
   refreshTtl: process.env.REFRESH_TOKEN_TTL || "7d",
   clientUrl: trimTrailingSlash(process.env.CLIENT_URL || "http://localhost:5173"),
-  clientUrls: parseCsv(process.env.CLIENT_URLS || "")
+  clientUrls: parseCsv(process.env.CLIENT_URLS || ""),
+  upstashRedisRestUrl: process.env.UPSTASH_REDIS_REST_URL || "",
+  upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN || ""
 };
 
 export function validateEnv() {

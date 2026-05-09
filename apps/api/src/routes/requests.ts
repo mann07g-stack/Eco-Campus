@@ -6,6 +6,7 @@ import { NegotiationModel } from "../models/Negotiation";
 import { QrTokenModel } from "../models/QrToken";
 import { UserModel } from "../models/User";
 import { signQrPayload } from "../utils/qr";
+import { createRateLimiter } from "../middleware/rateLimiter";
 
 const createRequestSchema = z.object({
   imageUrl: z.string().min(1).optional(),
@@ -32,7 +33,9 @@ const cancelSchema = z.object({
 
 export const requestRouter = Router();
 
-requestRouter.post("/", requireAuth, requireRole("USER"), async (req: AuthRequest, res) => {
+const requestCreateLimiter = createRateLimiter({ prefix: "request-create", limit: 5, window: "1 m" });
+
+requestRouter.post("/", requestCreateLimiter, requireAuth, requireRole("USER"), async (req: AuthRequest, res) => {
   const parsed = createRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.flatten() });

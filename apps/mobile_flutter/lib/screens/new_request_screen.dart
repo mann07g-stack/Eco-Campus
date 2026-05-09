@@ -59,7 +59,7 @@ class _NewRequestScreenState extends State<NewRequestScreen> {
   String _message = "";
 
   Future<void> _capturePhoto() async {
-    final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 82);
+    final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 65);
     if (photo == null) return;
 
     final bytes = await photo.readAsBytes();
@@ -69,7 +69,7 @@ class _NewRequestScreenState extends State<NewRequestScreen> {
   }
 
   Future<void> _pickPhotos() async {
-    final photos = await _picker.pickMultiImage(imageQuality: 82);
+    final photos = await _picker.pickMultiImage(imageQuality: 65);
     if (photos.isEmpty) return;
 
     final selected = <_PickedPhoto>[];
@@ -78,6 +78,50 @@ class _NewRequestScreenState extends State<NewRequestScreen> {
     }
 
     setState(() => _photos.addAll(selected));
+  }
+
+  Future<void> _addMorePhotos() async {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("Add More Photos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _capturePhoto();
+                    },
+                    icon: const Icon(Icons.photo_camera),
+                    label: const Text("Take Photo"),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _pickPhotos();
+                    },
+                    icon: const Icon(Icons.collections),
+                    label: const Text("Choose from Gallery"),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _removePhoto(int index) {
@@ -91,6 +135,13 @@ class _NewRequestScreenState extends State<NewRequestScreen> {
     });
 
     try {
+      if (_photos.isEmpty) {
+        throw Exception("Please select at least one photo");
+      }
+      if (_description.text.trim().isEmpty) {
+        throw Exception("Please enter a description");
+      }
+
       await ApiService.instance.createRequest(
         imageUrls: _photos.map((photo) => photo.toDataUrl()).toList(),
         description: _description.text.trim(),
@@ -98,13 +149,14 @@ class _NewRequestScreenState extends State<NewRequestScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _message = "Request submitted successfully.";
+        _message = "Request submitted successfully!";
         _description.clear();
         _selected.clear();
         _photos.clear();
       });
-    } catch (_) {
-      setState(() => _message = "Failed to submit request.");
+    } catch (e) {
+      setState(() => _message = "Error: ${e.toString()}");
+
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -140,43 +192,58 @@ class _NewRequestScreenState extends State<NewRequestScreen> {
                       FilledButton.tonalIcon(onPressed: _pickPhotos, icon: const Icon(Icons.collections), label: const Text("Gallery")),
                     ],
                   ),
+                  if (_photos.isNotEmpty) ...[const SizedBox(height: 12), const Text("Tip: You can add more photos even after initial selection.", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54))],
+                  if (_photos.isNotEmpty) ...[const SizedBox(height: 8)],
                   const SizedBox(height: 16),
                   if (_photos.isNotEmpty)
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _photos.length,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                      ),
-                      itemBuilder: (context, index) {
-                        final photo = _photos[index];
-                        return Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Image.memory(photo.bytes, fit: BoxFit.cover),
-                            ),
-                            Positioned(
-                              right: 4,
-                              top: 4,
-                              child: CircleAvatar(
-                                radius: 14,
-                                backgroundColor: Colors.black87,
-                                child: IconButton(
-                                  padding: EdgeInsets.zero,
-                                  iconSize: 16,
-                                  onPressed: () => _removePhoto(index),
-                                  icon: const Icon(Icons.close, color: Colors.white),
+                    Column(
+                      children: [
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _photos.length,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 3,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          itemBuilder: (context, index) {
+                            final photo = _photos[index];
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Image.memory(photo.bytes, fit: BoxFit.cover),
                                 ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                                Positioned(
+                                  right: 4,
+                                  top: 4,
+                                  child: CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: Colors.black87,
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      iconSize: 16,
+                                      onPressed: () => _removePhoto(index),
+                                      icon: const Icon(Icons.close, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonalIcon(
+                            onPressed: _addMorePhotos,
+                            icon: const Icon(Icons.add_a_photo),
+                            label: const Text("Add More Photos"),
+                          ),
+                        ),
+                      ],
                     ),
                 ],
               ),

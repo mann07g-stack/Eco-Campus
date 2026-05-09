@@ -315,6 +315,17 @@ h3 {
   border: 1px solid var(--line);
 }
 
+@media (max-width: 600px) {
+  .image-strip {
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+    gap: 6px;
+  }
+
+  .image-strip img {
+    height: 70px;
+  }
+}
+
 .thumb-btn {
   padding: 0;
   border: none;
@@ -463,6 +474,22 @@ td {
   .chart-grid,
   .members-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .lightbox {
+    padding: 12px;
+  }
+
+  .lightbox-image {
+    max-width: 95vw;
+    max-height: 75vh;
+  }
+
+  .lightbox-close {
+    top: 12px;
+    right: 12px;
   }
 }
 

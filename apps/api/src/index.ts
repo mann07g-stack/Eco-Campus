@@ -44,7 +44,7 @@ async function createApp() {
       credentials: true
     })
   );
-  app.use(express.json({ limit: "5mb" }));
+  app.use(express.json({ limit: "100mb" }));
   app.use(morgan("dev", { skip: (req) => req.method === "OPTIONS" }));
 
   app.get("/api/health", (_req, res) => {

@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "package:flutter/material.dart";
 import "package:qr_flutter/qr_flutter.dart";
 
@@ -186,6 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (images.isEmpty) return;
 
     final controller = PageController(initialPage: initialIndex);
+    var currentIndex = initialIndex;
 
     await showDialog<void>(
       context: context,
@@ -197,20 +200,45 @@ class _HomeScreenState extends State<HomeScreen> {
             appBar: AppBar(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
-              title: Text("Image ${initialIndex + 1}/${images.length}"),
+              title: StatefulBuilder(
+                builder: (context, setState) {
+                  controller.addListener(() {
+                    final newIndex = controller.page?.round() ?? initialIndex;
+                    if (newIndex != currentIndex) {
+                      setState(() => currentIndex = newIndex);
+                    }
+                  });
+                  return Text("Image ${currentIndex + 1}/${images.length}");
+                },
+              ),
             ),
             body: PageView.builder(
               controller: controller,
               itemCount: images.length,
               itemBuilder: (context, index) {
+                final imageUrl = images[index];
+                final isDataUrl = imageUrl.startsWith("data:");
+
                 return Center(
-                  child: InteractiveViewer(
-                    minScale: 0.8,
-                    maxScale: 4,
-                    child: Image.network(
-                      images[index],
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 56),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.95,
+                      maxHeight: MediaQuery.of(context).size.height * 0.8,
+                    ),
+                    child: InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4,
+                      child: isDataUrl
+                          ? Image.memory(
+                              base64Decode(imageUrl.split(",").last),
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 56),
+                            )
+                          : Image.network(
+                              imageUrl,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 56),
+                            ),
                     ),
                   ),
                 );
@@ -390,18 +418,40 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Container(
-                        height: 180,
+                        height: 140,
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.25,
+                        ),
                         color: const Color(0xFFF1F4F2),
-                        child: Image.network(
-                          request.imageUrls.first,
-                          width: double.infinity,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Container(
-                            height: 180,
-                            alignment: Alignment.center,
-                            color: Colors.black12,
-                            child: const Icon(Icons.image_not_supported_outlined),
-                          ),
+                        child: Builder(
+                          builder: (context) {
+                            final imageUrl = request.imageUrls.first;
+                            final isDataUrl = imageUrl.startsWith("data:");
+                            
+                            return isDataUrl
+                                ? Image.memory(
+                                    base64Decode(imageUrl.split(",").last),
+                                    width: double.infinity,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 180,
+                                      alignment: Alignment.center,
+                                      color: Colors.black12,
+                                      child: const Icon(Icons.image_not_supported_outlined),
+                                    ),
+                                  )
+                                : Image.network(
+                                    imageUrl,
+                                    width: double.infinity,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 180,
+                                      alignment: Alignment.center,
+                                      color: Colors.black12,
+                                      child: const Icon(Icons.image_not_supported_outlined),
+                                    ),
+                                  );
+                          },
                         ),
                       ),
                     ),
